@@ -29,10 +29,10 @@ export function createBinaryGlyphAtlas() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Outer subtle cyber glow
-    ctx.shadowColor = '#00ff88';
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    // Outer subtle neutral glow
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
     ctx.fillText(char, 0, 0);
 
     // Sharp white core

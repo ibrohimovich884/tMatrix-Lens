@@ -9,24 +9,20 @@ import heic2any from 'heic2any';
 
 export const App = () => {
   const [settings, setSettings] = useState({
-    morphProgress: 0.88, // Default 3D binary view
+    morphProgress: 0.90, // Default 3D binary view
     depthExtrusion: 38,
     pointSize: 22,
     resolution: 96,
-    theme: 'matrix-green',
+    theme: 'matrix-green', // Initial model uses matrix green, but uploaded photos switch to true-rgb
+    customColor: '#00ff88',
     mode: 'hologram',
-    binaryFlipSpeed: 1.0,
     waveIntensity: 0.8,
     rainSpeed: 0.8,
-    bloomGlow: 0.45,
-    invertLuminance: false,
     autoRotate: false,
     soundEnabled: true,
     brightness: 0.0,
     contrast: 1.15,
     threshold: 0.5,
-    gammaCurve: 1.0,
-    filterDarkBg: false,
   });
 
   const [currentPresetId, setCurrentPresetId] = useState('hacker');
@@ -35,7 +31,7 @@ export const App = () => {
   const [isAutoMorphing, setIsAutoMorphing] = useState(false);
   const [fps, setFps] = useState(60);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [uploadToast, setUploadToast] = useState({ show: false, message: '' });
+  const [uploadToast, setUploadToast] = useState({ show: false, message: '', loading: false });
 
   // Active Image Source (Canvas) & dimensions
   const [activeImageSource, setActiveImageSource] = useState(null);
@@ -48,7 +44,7 @@ export const App = () => {
   const autoMorphDirRef = useRef(1);
   const webcamUpdateIntervalRef = useRef(0);
 
-  // Preset generator
+  // Preset generator (keeps default 3D model on initial boot so user sees it working immediately)
   const renderPresetToCanvas = useCallback((presetId) => {
     const preset = PRESET_IMAGES.find((p) => p.id === presetId) || PRESET_IMAGES[0];
     const canvas = document.createElement('canvas');
@@ -62,7 +58,7 @@ export const App = () => {
     setImageDimensions({ width: 512, height: 512 });
   }, []);
 
-  // Initial load
+  // Initial load: render default 3D model
   useEffect(() => {
     renderPresetToCanvas('hacker');
   }, [renderPresetToCanvas]);
@@ -109,10 +105,12 @@ export const App = () => {
     setUploadedFileName(fileName || 'Yuklangan rasm');
     soundFx.playMorph(settings.soundEnabled);
 
-    // Make sure morphProgress is in 3D mode (at least 85%) so the 0 and 1 relief is immediately visible!
+    // CRITICAL: Switch to 'true-rgb' so the photo appears in its authentic natural colors
+    // with NO strange cyan/blueish tint, and ensure 3D relief is visible!
     setSettings((prev) => ({
       ...prev,
-      morphProgress: Math.max(prev.morphProgress, 0.88),
+      theme: 'true-rgb',
+      morphProgress: Math.max(prev.morphProgress, 0.90),
     }));
 
     if (sceneRef.current) {
@@ -122,10 +120,11 @@ export const App = () => {
     // Success toast
     setUploadToast({
       show: true,
-      message: `"${fileName || 'Rasm'}" yuklandi — 3D 0 va 1 larda koʻrsatilmoqda!`,
+      message: `"${fileName || 'Rasm'}" yuklandi — Asl ranglarda 3D 0 va 1 larda koʻrsatilmoqda!`,
+      loading: false,
     });
     setTimeout(() => {
-      setUploadToast({ show: false, message: '' });
+      setUploadToast({ show: false, message: '', loading: false });
     }, 4500);
   }, [settings.soundEnabled]);
 
@@ -150,7 +149,7 @@ export const App = () => {
         const conversionResult = await heic2any({
           blob: file,
           toType: 'image/jpeg',
-          quality: 0.9,
+          quality: 0.92,
         });
         processedBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
       } catch (heicErr) {
@@ -263,26 +262,38 @@ export const App = () => {
         vid.muted = true;
         videoRef.current = vid;
       }
-
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
       setIsWebcamActive(true);
       setCurrentPresetId('webcam');
+      setUploadedFileName('Jonli Kamera');
 
-      webcamUpdateIntervalRef.current = window.setInterval(() => {
-        if (videoRef.current && sceneRef.current && videoRef.current.readyState >= 2) {
-          sceneRef.current.updateImageSource(
-            videoRef.current,
-            videoRef.current.videoWidth || 480,
-            videoRef.current.videoHeight || 480
-          );
+      // Sync webcam frame to canvas periodically
+      const captureWebcamFrame = () => {
+        if (!videoRef.current || !isWebcamActive) return;
+        const vid = videoRef.current;
+        if (vid.readyState >= 2) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 384;
+          canvas.height = 384;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(vid, 0, 0, 384, 384);
+            setActiveImageSource(canvas);
+            setImageDimensions({ width: 384, height: 384 });
+            if (sceneRef.current) {
+              sceneRef.current.updateImageSource(canvas, 384, 384);
+            }
+          }
         }
-      }, 100);
+      };
+
+      captureWebcamFrame();
+      webcamUpdateIntervalRef.current = window.setInterval(captureWebcamFrame, 150);
     } catch (err) {
       console.warn('Webcam permission error:', err);
-      alert('Veb-kamera ulanmadi yoki ruxsat berilmadi.');
-      stopWebcam();
+      setIsWebcamActive(false);
     }
   };
 
@@ -295,25 +306,29 @@ export const App = () => {
     }
   };
 
-  // Auto-Morph between 2D and 3D
+  // Auto 2D <-> 3D Morphing Animation loop
   const toggleAutoMorph = () => {
     setIsAutoMorphing((prev) => !prev);
   };
 
   useEffect(() => {
     if (!isAutoMorphing) {
-      cancelAnimationFrame(autoMorphAnimRef.current);
+      if (autoMorphAnimRef.current) cancelAnimationFrame(autoMorphAnimRef.current);
       return;
     }
 
-    const morphLoop = () => {
+    let lastTime = performance.now();
+    const morphLoop = (now) => {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
       setSettings((prev) => {
-        let next = prev.morphProgress + 0.007 * autoMorphDirRef.current;
+        let next = prev.morphProgress + autoMorphDirRef.current * dt * 0.4;
         if (next >= 1.0) {
           next = 1.0;
           autoMorphDirRef.current = -1;
-        } else if (next <= 0.05) {
-          next = 0.05;
+        } else if (next <= 0.0) {
+          next = 0.0;
           autoMorphDirRef.current = 1;
         }
         return { ...prev, morphProgress: next };
@@ -353,7 +368,7 @@ export const App = () => {
   const totalParticles = settings.resolution * Math.round(settings.resolution / (imageDimensions.width / imageDimensions.height));
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-black font-sans select-none">
+    <div className="relative w-screen h-screen overflow-hidden bg-[#060709] font-sans select-none">
       {/* 3D WebGL Canvas Layer */}
       <MatrixScene
         ref={sceneRef}
@@ -366,7 +381,7 @@ export const App = () => {
 
       {/* Upload Status Toast */}
       {uploadToast.show && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-emerald-950/90 border border-emerald-400 text-emerald-300 rounded-full text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-gray-950/95 border border-emerald-400 text-emerald-300 rounded-full text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2">
           {uploadToast.loading ? (
             <Loader2 size={16} className="text-emerald-400 shrink-0 animate-spin" />
           ) : (
@@ -379,7 +394,7 @@ export const App = () => {
       {/* Drag & Drop Visual Overlay */}
       {isDraggingOver && (
         <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center bg-black/80 backdrop-blur-md border-4 border-dashed border-emerald-400 p-8">
-          <div className="bg-gray-950/90 border border-emerald-400 p-8 rounded-2xl flex flex-col items-center gap-3 text-center shadow-2xl">
+          <div className="bg-gray-950/95 border border-emerald-400 p-8 rounded-2xl flex flex-col items-center gap-3 text-center shadow-2xl">
             <Upload size={48} className="text-emerald-400 animate-bounce" />
             <h2 className="text-xl font-mono font-bold text-emerald-300">Rasmni bu yerga tashlang</h2>
             <p className="text-sm font-mono text-gray-300">Rasm lahzada 3D 0 va 1 piksellarga aylanadi</p>
