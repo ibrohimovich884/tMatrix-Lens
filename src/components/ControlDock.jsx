@@ -137,7 +137,7 @@ export const ControlDock = ({
                     <span className="sm:hidden">Rasm yuklash</span>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*,.heic,.heif,.HEIC,.HEIF"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file && onUploadImage) {

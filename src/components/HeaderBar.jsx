@@ -79,7 +79,7 @@ export const HeaderBar = ({
               </span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif,.HEIC,.HEIF"
                 onChange={handleFileChange}
                 className="sr-only"
               />

@@ -4,7 +4,8 @@ import { MatrixScene } from './components/MatrixScene.jsx';
 import { ControlDock } from './components/ControlDock.jsx';
 import { HeaderBar } from './components/HeaderBar.jsx';
 import { soundFx } from './utils/audio.js';
-import { Upload, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Upload, Sparkles, CheckCircle2, Loader2 } from 'lucide-react';
+import heic2any from 'heic2any';
 
 export const App = () => {
   const [settings, setSettings] = useState({
@@ -123,14 +124,37 @@ export const App = () => {
     }, 4500);
   }, [settings.soundEnabled]);
 
-  // Process any uploaded Image File (from file picker or Drag-and-Drop)
-  const processImageFile = useCallback((file) => {
+  // Process any uploaded Image File (JPG, PNG, HEIC, WebP, etc.)
+  const processImageFile = useCallback(async (file) => {
     if (!file) return;
     stopWebcam();
 
-    // Try URL.createObjectURL first (fastest, zero memory pressure on mobile)
+    let processedBlob = file;
+    const isHeic = file.name?.toLowerCase().endsWith('.heic') || 
+                   file.name?.toLowerCase().endsWith('.heif') ||
+                   file.type === 'image/heic' || 
+                   file.type === 'image/heif';
+
+    if (isHeic) {
+      setUploadToast({
+        show: true,
+        message: 'iPhone HEIC rasm ochilmoqda...',
+        loading: true,
+      });
+      try {
+        const conversionResult = await heic2any({
+          blob: file,
+          toType: 'image/jpeg',
+          quality: 0.9,
+        });
+        processedBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
+      } catch (heicErr) {
+        console.warn('HEIC conversion fallback:', heicErr);
+      }
+    }
+
     try {
-      const objectUrl = URL.createObjectURL(file);
+      const objectUrl = URL.createObjectURL(processedBlob);
       const img = new Image();
       img.crossOrigin = 'anonymous';
 
@@ -152,7 +176,7 @@ export const App = () => {
             fallbackImg.src = e.target.result;
           }
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(processedBlob);
       };
 
       img.src = objectUrl;
@@ -168,7 +192,7 @@ export const App = () => {
           fallbackImg.src = e.target.result;
         }
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(processedBlob);
     }
   }, [applyImageElementToMatrix]);
 
@@ -335,10 +359,14 @@ export const App = () => {
         onFpsUpdate={setFps}
       />
 
-      {/* Upload Success Toast */}
+      {/* Upload Status Toast */}
       {uploadToast.show && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-emerald-950/90 border border-emerald-400 text-emerald-300 rounded-full text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2 animate-bounce">
-          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-emerald-950/90 border border-emerald-400 text-emerald-300 rounded-full text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2">
+          {uploadToast.loading ? (
+            <Loader2 size={16} className="text-emerald-400 shrink-0 animate-spin" />
+          ) : (
+            <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+          )}
           <span>{uploadToast.message}</span>
         </div>
       )}
