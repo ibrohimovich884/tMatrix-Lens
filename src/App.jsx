@@ -4,34 +4,48 @@ import { MatrixScene } from './components/MatrixScene.jsx';
 import { ControlDock } from './components/ControlDock.jsx';
 import { HeaderBar } from './components/HeaderBar.jsx';
 import { soundFx } from './utils/audio.js';
-import { Upload, Sparkles, CheckCircle2, Loader2 } from 'lucide-react';
-import heic2any from 'heic2any';
+import { Upload, Sparkles, CheckCircle2, Loader2, Heart } from 'lucide-react';
 
 export const App = () => {
-  const [settings, setSettings] = useState({
-    morphProgress: 0.90, // Default 3D binary view
-    depthExtrusion: 38,
-    pointSize: 22,
-    resolution: 96,
-    theme: 'matrix-green', // Initial model uses matrix green, but uploaded photos switch to true-rgb
-    customColor: '#00ff88',
-    mode: 'hologram',
-    waveIntensity: 0.8,
-    rainSpeed: 0.8,
-    autoRotate: false,
-    soundEnabled: true,
-    brightness: 0.0,
-    contrast: 1.15,
-    threshold: 0.5,
+  const [settings, setSettings] = useState(() => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    return {
+      morphProgress: 0.95, // Default 3D photorelief
+      depthExtrusion: 38,
+      pointSize: isMobile ? 22 : 19,
+      resolution: isMobile ? 65 : 95, // 95x95 = 9,025 points on desktop, 65x65 on mobile for 60fps
+      sharpness: 1.25, // Sharp contours and edges
+      particleStyle: 'prism', // 'prism' | 'spheres' | 'glyphs' | 'diamonds'
+      theme: 'true-rgb', // Authentic photo colors without any distorting tint
+      customColor: '#ff4d88',
+      mode: 'hologram',
+      waveIntensity: 0.8,
+      rainSpeed: 0.8,
+      autoRotate: false,
+      soundEnabled: true,
+      brightness: 0.0,
+      contrast: 1.15,
+      threshold: 0.5,
+      alivePulse: 0.6, // Subtle organic breathing
+      laserActive: false, // Laser scan sweep
+    };
   });
 
-  const [currentPresetId, setCurrentPresetId] = useState('hacker');
+  const [currentPresetId, setCurrentPresetId] = useState('romantic-lovers');
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [isAutoMorphing, setIsAutoMorphing] = useState(false);
+  const [isCinematicOrbit, setIsCinematicOrbit] = useState(false);
   const [fps, setFps] = useState(60);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadToast, setUploadToast] = useState({ show: false, message: '', loading: false });
+
+  // Video recording state
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [recordProgress, setRecordProgress] = useState(0);
+
+  // Social media framing (Free / 9:16 Reels / 1:1 Post)
+  const [aspectRatioMode, setAspectRatioMode] = useState('free');
 
   // Active Image Source (Canvas) & dimensions
   const [activeImageSource, setActiveImageSource] = useState(null);
@@ -44,7 +58,7 @@ export const App = () => {
   const autoMorphDirRef = useRef(1);
   const webcamUpdateIntervalRef = useRef(0);
 
-  // Preset generator (keeps default 3D model on initial boot so user sees it working immediately)
+  // Preset generator
   const renderPresetToCanvas = useCallback((presetId) => {
     const preset = PRESET_IMAGES.find((p) => p.id === presetId) || PRESET_IMAGES[0];
     const canvas = document.createElement('canvas');
@@ -58,9 +72,9 @@ export const App = () => {
     setImageDimensions({ width: 512, height: 512 });
   }, []);
 
-  // Initial load: render default 3D model
+  // Initial load: render default romantic model
   useEffect(() => {
-    renderPresetToCanvas('hacker');
+    renderPresetToCanvas('romantic-lovers');
   }, [renderPresetToCanvas]);
 
   // Audio ambient hum
@@ -102,15 +116,14 @@ export const App = () => {
     setActiveImageSource(canvas);
     setImageDimensions({ width: w, height: h });
     setCurrentPresetId('custom');
-    setUploadedFileName(fileName || 'Yuklangan rasm');
+    setUploadedFileName(fileName || 'Yuklangan surat');
     soundFx.playMorph(settings.soundEnabled);
 
-    // CRITICAL: Switch to 'true-rgb' so the photo appears in its authentic natural colors
-    // with NO strange cyan/blueish tint, and ensure 3D relief is visible!
+    // Switch to 'true-rgb' so photo appears in its natural colors and ensure 3D depth is active!
     setSettings((prev) => ({
       ...prev,
       theme: 'true-rgb',
-      morphProgress: Math.max(prev.morphProgress, 0.90),
+      morphProgress: Math.max(prev.morphProgress, 0.92),
     }));
 
     if (sceneRef.current) {
@@ -120,7 +133,7 @@ export const App = () => {
     // Success toast
     setUploadToast({
       show: true,
-      message: `"${fileName || 'Rasm'}" yuklandi — Asl ranglarda 3D 0 va 1 larda koʻrsatilmoqda!`,
+      message: `"${fileName || 'Surat'}" yuklandi — 3D fotorelyef yaratildi!`,
       loading: false,
     });
     setTimeout(() => {
@@ -128,7 +141,7 @@ export const App = () => {
     }, 4500);
   }, [settings.soundEnabled]);
 
-  // Process any uploaded Image File (JPG, PNG, HEIC, WebP, etc.)
+  // Process raw Image File (JPG, PNG, HEIC, WebP, etc.)
   const processImageFile = useCallback(async (file) => {
     if (!file) return;
     stopWebcam();
@@ -142,10 +155,11 @@ export const App = () => {
     if (isHeic) {
       setUploadToast({
         show: true,
-        message: 'iPhone HEIC rasm ochilmoqda...',
+        message: 'iPhone HEIC format ochilmoqda...',
         loading: true,
       });
       try {
+        const { default: heic2any } = await import('heic2any');
         const conversionResult = await heic2any({
           blob: file,
           toType: 'image/jpeg',
@@ -169,7 +183,6 @@ export const App = () => {
 
       img.onerror = () => {
         URL.revokeObjectURL(objectUrl);
-        // Fallback to FileReader
         const reader = new FileReader();
         reader.onload = (e) => {
           if (typeof e.target?.result === 'string') {
@@ -185,7 +198,6 @@ export const App = () => {
 
       img.src = objectUrl;
     } catch {
-      // FileReader fallback
       const reader = new FileReader();
       reader.onload = (e) => {
         if (typeof e.target?.result === 'string') {
@@ -269,7 +281,6 @@ export const App = () => {
       setCurrentPresetId('webcam');
       setUploadedFileName('Jonli Kamera');
 
-      // Sync webcam frame to canvas periodically
       const captureWebcamFrame = () => {
         if (!videoRef.current || !isWebcamActive) return;
         const vid = videoRef.current;
@@ -300,7 +311,7 @@ export const App = () => {
   const handleToggleWebcam = () => {
     if (isWebcamActive) {
       stopWebcam();
-      renderPresetToCanvas(currentPresetId === 'webcam' ? 'hacker' : currentPresetId);
+      renderPresetToCanvas(currentPresetId === 'webcam' ? 'romantic-lovers' : currentPresetId);
     } else {
       startWebcam();
     }
@@ -340,16 +351,60 @@ export const App = () => {
     return () => cancelAnimationFrame(autoMorphAnimRef.current);
   }, [isAutoMorphing]);
 
-  // Snapshot Capture & Download
-  const handleCaptureSnapshot = () => {
+  // Snapshot Capture & Download (Supports HD multiplier)
+  const handleCaptureSnapshot = (highRes = false) => {
     if (!sceneRef.current) return;
-    const dataUrl = sceneRef.current.captureSnapshot();
+    const dataUrl = sceneRef.current.captureSnapshot(highRes);
     if (!dataUrl) return;
 
     const link = document.createElement('a');
-    link.download = `tMatrix-3D-binary-${Date.now()}.png`;
+    link.download = `trend-3D-romantic-${Date.now()}.png`;
     link.href = dataUrl;
     link.click();
+
+    setUploadToast({
+      show: true,
+      message: 'Surat saqlandi! (PNG)',
+      loading: false,
+    });
+    setTimeout(() => {
+      setUploadToast({ show: false, message: '', loading: false });
+    }, 3000);
+  };
+
+  // Instagram Reels Video Recording
+  const handleRecordVideo = (durationMs = 6000) => {
+    if (!sceneRef.current || isRecordingVideo) return;
+    setIsRecordingVideo(true);
+    setRecordProgress(0);
+
+    // If cinematic orbit is not active, turn it on for the video recording!
+    if (!isCinematicOrbit) {
+      setIsCinematicOrbit(true);
+    }
+
+    sceneRef.current.startRecordingVideo(
+      durationMs,
+      (pct) => setRecordProgress(pct),
+      (blob) => {
+        setIsRecordingVideo(false);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `trend-3D-reels-${Date.now()}.webm`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        setUploadToast({
+          show: true,
+          message: 'Instagram Reels video yuklab olindi! (WebM)',
+          loading: false,
+        });
+        setTimeout(() => {
+          setUploadToast({ show: false, message: '', loading: false });
+        }, 4000);
+      }
+    );
   };
 
   // Camera Presets
@@ -360,6 +415,7 @@ export const App = () => {
   };
 
   const handleResetView = () => {
+    setIsCinematicOrbit(false);
     if (sceneRef.current) {
       sceneRef.current.resetCamera('front');
     }
@@ -368,7 +424,7 @@ export const App = () => {
   const totalParticles = settings.resolution * Math.round(settings.resolution / (imageDimensions.width / imageDimensions.height));
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#060709] font-sans select-none">
+    <div className="relative w-screen h-screen overflow-hidden bg-[#06070a] font-sans select-none">
       {/* 3D WebGL Canvas Layer */}
       <MatrixScene
         ref={sceneRef}
@@ -377,15 +433,17 @@ export const App = () => {
         imageWidth={imageDimensions.width}
         imageHeight={imageDimensions.height}
         onFpsUpdate={setFps}
+        isCinematicOrbit={isCinematicOrbit}
+        aspectRatioMode={aspectRatioMode}
       />
 
-      {/* Upload Status Toast */}
+      {/* Upload & Action Toast Notification */}
       {uploadToast.show && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-gray-950/95 border border-emerald-400 text-emerald-300 rounded-full text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-gray-950/95 border border-rose-400 text-rose-300 rounded-full text-xs font-mono shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
           {uploadToast.loading ? (
-            <Loader2 size={16} className="text-emerald-400 shrink-0 animate-spin" />
+            <Loader2 size={16} className="text-rose-400 shrink-0 animate-spin" />
           ) : (
-            <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+            <CheckCircle2 size={16} className="text-rose-400 shrink-0" />
           )}
           <span>{uploadToast.message}</span>
         </div>
@@ -393,16 +451,16 @@ export const App = () => {
 
       {/* Drag & Drop Visual Overlay */}
       {isDraggingOver && (
-        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center bg-black/80 backdrop-blur-md border-4 border-dashed border-emerald-400 p-8">
-          <div className="bg-gray-950/95 border border-emerald-400 p-8 rounded-2xl flex flex-col items-center gap-3 text-center shadow-2xl">
-            <Upload size={48} className="text-emerald-400 animate-bounce" />
-            <h2 className="text-xl font-mono font-bold text-emerald-300">Rasmni bu yerga tashlang</h2>
-            <p className="text-sm font-mono text-gray-300">Rasm lahzada 3D 0 va 1 piksellarga aylanadi</p>
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center bg-black/80 backdrop-blur-md border-4 border-dashed border-rose-400 p-8">
+          <div className="bg-gray-950/95 border border-rose-400 p-8 rounded-2xl flex flex-col items-center gap-3 text-center shadow-2xl">
+            <Upload size={48} className="text-rose-400 animate-bounce" />
+            <h2 className="text-xl font-mono font-bold text-rose-300">Suratni bu yerga tashlang</h2>
+            <p className="text-sm font-mono text-gray-300">Rasm bir zumda 3D relyinga aylanadi</p>
           </div>
         </div>
       )}
 
-      {/* Top Header Bar */}
+      {/* Top Header Bar with 1 Single Effect Upload Button */}
       <HeaderBar
         currentPresetId={currentPresetId}
         onSelectPreset={handleSelectPreset}
@@ -411,7 +469,7 @@ export const App = () => {
         onToggleWebcam={handleToggleWebcam}
         soundEnabled={settings.soundEnabled}
         onToggleSound={() => setSettings((s) => ({ ...s, soundEnabled: !s.soundEnabled }))}
-        onCaptureSnapshot={handleCaptureSnapshot}
+        onCaptureSnapshot={() => handleCaptureSnapshot(false)}
         onResetView={handleResetView}
         fps={fps}
         uploadedFileName={uploadedFileName}
@@ -423,10 +481,18 @@ export const App = () => {
         onSettingsChange={(newSet) => setSettings((s) => ({ ...s, ...newSet }))}
         onCameraPreset={handleCameraPreset}
         onUploadImage={processImageFile}
+        uploadedFileName={uploadedFileName}
         isAutoMorphing={isAutoMorphing}
         onToggleAutoMorph={toggleAutoMorph}
         totalParticles={totalParticles}
-        uploadedFileName={uploadedFileName}
+        isCinematicOrbit={isCinematicOrbit}
+        onToggleCinematicOrbit={() => setIsCinematicOrbit((prev) => !prev)}
+        onCaptureSnapshot={handleCaptureSnapshot}
+        onRecordVideo={handleRecordVideo}
+        isRecordingVideo={isRecordingVideo}
+        recordProgress={recordProgress}
+        aspectRatioMode={aspectRatioMode}
+        onChangeAspectRatio={setAspectRatioMode}
       />
     </div>
   );
