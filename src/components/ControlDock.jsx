@@ -11,6 +11,10 @@ import {
   RotateCw,
   Sparkles,
   Sliders,
+  SlidersHorizontal,
+  Sun,
+  Contrast,
+  RotateCcw,
   X,
   Minimize2,
   Upload
@@ -247,6 +251,21 @@ export const ControlDock = ({
                   <button
                     onClick={() => {
                       soundFx.playClick(settings.soundEnabled);
+                      setActiveTab('image');
+                    }}
+                    className={`flex-1 sm:flex-none px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeTab === 'image'
+                        ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 font-semibold'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-900/60'
+                    }`}
+                  >
+                    <SlidersHorizontal size={13} />
+                    <span>Rasm Sozlamalari</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      soundFx.playClick(settings.soundEnabled);
                       setActiveTab('camera');
                     }}
                     className={`flex-1 sm:flex-none px-2.5 py-1.5 rounded-lg text-xs font-mono flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
@@ -432,6 +451,117 @@ export const ControlDock = ({
                           className="w-full h-2 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-emerald-400"
                         />
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab: Rasm Sozlamalari (Image Adjustments) */}
+                {activeTab === 'image' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      {/* Brightness */}
+                      <div>
+                        <div className="flex justify-between text-xs font-mono text-gray-300 mb-1">
+                          <span className="flex items-center gap-1"><Sun size={12} className="text-emerald-400" /> Yorqinlik</span>
+                          <span className="text-emerald-400 font-bold">{Math.round((settings.brightness ?? 0) * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-0.4"
+                          max="0.4"
+                          step="0.02"
+                          value={settings.brightness ?? 0.0}
+                          onChange={(e) => onSettingsChange({ brightness: parseFloat(e.target.value) })}
+                          className="w-full h-2 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                        />
+                      </div>
+
+                      {/* Contrast */}
+                      <div>
+                        <div className="flex justify-between text-xs font-mono text-gray-300 mb-1">
+                          <span className="flex items-center gap-1"><Contrast size={12} className="text-emerald-400" /> Kontrast</span>
+                          <span className="text-emerald-400 font-bold">{(settings.contrast ?? 1.15).toFixed(1)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2.5"
+                          step="0.05"
+                          value={settings.contrast ?? 1.15}
+                          onChange={(e) => onSettingsChange({ contrast: parseFloat(e.target.value) })}
+                          className="w-full h-2 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                        />
+                      </div>
+
+                      {/* 0 vs 1 Threshold / Density */}
+                      <div>
+                        <div className="flex justify-between text-xs font-mono text-gray-300 mb-1">
+                          <span>0 ⇄ 1 Zichligi</span>
+                          <span className="text-emerald-400 font-bold">{Math.round((settings.threshold ?? 0.5) * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="0.9"
+                          step="0.02"
+                          value={settings.threshold ?? 0.5}
+                          onChange={(e) => onSettingsChange({ threshold: parseFloat(e.target.value) })}
+                          className="w-full h-2 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                        />
+                      </div>
+
+                      {/* 3D Depth Curve / Gamma */}
+                      <div>
+                        <div className="flex justify-between text-xs font-mono text-gray-300 mb-1">
+                          <span>3D Relyef Egri Chizigʻi</span>
+                          <span className="text-emerald-400 font-bold">{(settings.gammaCurve ?? 1.0).toFixed(1)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2.2"
+                          step="0.05"
+                          value={settings.gammaCurve ?? 1.0}
+                          onChange={(e) => onSettingsChange({ gammaCurve: parseFloat(e.target.value) })}
+                          className="w-full h-2 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Checkboxes & Reset */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1 border-t border-gray-800/60">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <label className="text-xs font-mono text-gray-300 flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!settings.filterDarkBg}
+                            onChange={(e) => {
+                              soundFx.playClick(settings.soundEnabled);
+                              onSettingsChange({ filterDarkBg: e.target.checked });
+                            }}
+                            className="w-4 h-4 rounded bg-gray-900 border-gray-700 text-emerald-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>Qora fonni tozalash (Faqat obyekt qolsin)</span>
+                        </label>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          soundFx.playClick(settings.soundEnabled);
+                          onSettingsChange({
+                            brightness: 0.0,
+                            contrast: 1.15,
+                            threshold: 0.5,
+                            gammaCurve: 1.0,
+                            filterDarkBg: false,
+                          });
+                        }}
+                        className="px-2.5 py-1 text-[11px] font-mono text-gray-400 hover:text-emerald-300 hover:bg-gray-900 border border-gray-800 rounded-lg flex items-center gap-1 transition-all cursor-pointer"
+                        title="Rasm parametrlarini standart holatga qaytarish"
+                      >
+                        <RotateCcw size={11} />
+                        <span>Standartga qaytarish</span>
+                      </button>
                     </div>
                   </div>
                 )}

@@ -287,6 +287,11 @@ export const MatrixScene = forwardRef(({
       uniform float uRainSpeed;
       uniform float uPixelRatio;
       uniform float uInvertLuminance;
+      uniform float uBrightness;
+      uniform float uContrast;
+      uniform float uGammaCurve;
+      uniform float uThreshold;
+      uniform float uFilterDarkBg;
 
       attribute vec3 aPosExtruded;
       attribute vec3 aPosRain;
@@ -312,8 +317,13 @@ export const MatrixScene = forwardRef(({
         vBinary = aBinary;
         vRandom = aRandom;
 
+        // Adjust luminance with brightness, contrast and gamma
+        float adjLum = (aLuminance + uBrightness - 0.5) * uContrast + 0.5;
+        adjLum = clamp(adjLum, 0.0, 1.0);
+        adjLum = pow(adjLum, max(0.2, uGammaCurve));
+
         // Invert luminance if requested
-        float effLum = uInvertLuminance > 0.5 ? (1.0 - aLuminance) : aLuminance;
+        float effLum = uInvertLuminance > 0.5 ? (1.0 - adjLum) : adjLum;
 
         // Target position based on active 3D mode
         vec3 targetPos = position;
@@ -371,6 +381,11 @@ export const MatrixScene = forwardRef(({
       uniform int uTheme; // 0: Matrix Green, 1: Cyber Cyan, 2: Amber CRT, 3: True RGB, 4: Red Alert, 5: Ghost White
       uniform float uBinaryFlipSpeed;
       uniform float uBloomGlow;
+      uniform float uBrightness;
+      uniform float uContrast;
+      uniform float uGammaCurve;
+      uniform float uThreshold;
+      uniform float uFilterDarkBg;
 
       varying vec3 vColor;
       varying float vLuminance;
@@ -383,10 +398,19 @@ export const MatrixScene = forwardRef(({
       void main() {
         if (vAlpha < 0.05) discard;
 
-        // Dynamic binary flicker between 0 and 1
+        // Apply real-time brightness & contrast to luminance
+        float adjLum = (vLuminance + uBrightness - 0.5) * uContrast + 0.5;
+        adjLum = clamp(adjLum, 0.0, 1.0);
+        adjLum = pow(adjLum, max(0.2, uGammaCurve));
+
+        // If background filter is active, discard dark background pixels
+        if (uFilterDarkBg > 0.5 && adjLum < 0.09) discard;
+
+        // Binary glyph decision: based on user threshold setting!
+        float thresholdBinary = adjLum >= uThreshold ? 1.0 : 0.0;
         float flickerTrigger = sin(uTime * (uBinaryFlipSpeed * 3.5) + vRandom * 6.28);
-        float activeGlyph = vBinary;
-        if (uBinaryFlipSpeed > 0.05 && flickerTrigger > 0.3) {
+        float activeGlyph = thresholdBinary;
+        if (uBinaryFlipSpeed > 0.05 && flickerTrigger > 0.42) {
           activeGlyph = 1.0 - activeGlyph;
         }
 
@@ -407,37 +431,38 @@ export const MatrixScene = forwardRef(({
           vec3 greenDark = vec3(0.02, 0.45, 0.15);
           vec3 greenNeon = vec3(0.0, 1.0, 0.42);
           vec3 greenHighlight = vec3(0.85, 1.0, 0.9);
-          baseColor = mix(greenDark, greenNeon, vLuminance);
-          if (vLuminance > 0.75) {
-            baseColor = mix(baseColor, greenHighlight, (vLuminance - 0.75) * 3.0);
+          baseColor = mix(greenDark, greenNeon, adjLum);
+          if (adjLum > 0.75) {
+            baseColor = mix(baseColor, greenHighlight, (adjLum - 0.75) * 3.0);
           }
         } else if (uTheme == 1) {
           // Cyberpunk Cyan / Neon Violet
           vec3 cyan = vec3(0.0, 0.95, 1.0);
           vec3 violet = vec3(0.55, 0.0, 1.0);
-          baseColor = mix(violet, cyan, vLuminance * 1.2);
+          baseColor = mix(violet, cyan, adjLum * 1.2);
         } else if (uTheme == 2) {
           // Amber CRT Terminal
           vec3 amberDeep = vec3(0.5, 0.15, 0.0);
           vec3 amberGlow = vec3(1.0, 0.72, 0.08);
           vec3 amberWhite = vec3(1.0, 0.95, 0.7);
-          baseColor = mix(amberDeep, amberGlow, vLuminance);
-          if (vLuminance > 0.8) baseColor = mix(baseColor, amberWhite, (vLuminance - 0.8) * 4.0);
+          baseColor = mix(amberDeep, amberGlow, adjLum);
+          if (adjLum > 0.8) baseColor = mix(baseColor, amberWhite, (adjLum - 0.8) * 4.0);
         } else if (uTheme == 3) {
-          // True RGB from original uploaded image
-          baseColor = vColor * 1.35;
+          // True RGB from original uploaded image with contrast boost
+          vec3 adjRGB = (vColor + vec3(uBrightness) - vec3(0.5)) * uContrast + vec3(0.5);
+          baseColor = clamp(adjRGB, 0.0, 1.0) * 1.35;
         } else if (uTheme == 4) {
           // Red Alert / Cyber Neon Crimson
           vec3 redDeep = vec3(0.4, 0.0, 0.08);
           vec3 redNeon = vec3(1.0, 0.15, 0.28);
           vec3 redSpark = vec3(1.0, 0.85, 0.9);
-          baseColor = mix(redDeep, redNeon, vLuminance);
-          if (vLuminance > 0.8) baseColor = mix(baseColor, redSpark, (vLuminance - 0.8) * 4.0);
+          baseColor = mix(redDeep, redNeon, adjLum);
+          if (adjLum > 0.8) baseColor = mix(baseColor, redSpark, (adjLum - 0.8) * 4.0);
         } else {
           // Ghost White / Holographic Cyan-Ice
           vec3 iceDark = vec3(0.1, 0.25, 0.4);
           vec3 iceBright = vec3(0.75, 0.92, 1.0);
-          baseColor = mix(iceDark, iceBright, vLuminance);
+          baseColor = mix(iceDark, iceBright, adjLum);
         }
 
         // In 2D mode, smoothly show natural colors if transforming from flat
@@ -456,7 +481,7 @@ export const MatrixScene = forwardRef(({
         // Boost core brightness
         baseColor *= (1.0 + uBloomGlow * 0.7);
 
-        gl_FragColor = vec4(baseColor, shapeAlpha * vAlpha * (0.6 + vLuminance * 0.4));
+        gl_FragColor = vec4(baseColor, shapeAlpha * vAlpha * (0.6 + adjLum * 0.4));
       }
     `;
 
@@ -477,6 +502,11 @@ export const MatrixScene = forwardRef(({
         uTheme: { value: 0 },
         uBinaryFlipSpeed: { value: settings.binaryFlipSpeed },
         uBloomGlow: { value: settings.bloomGlow },
+        uBrightness: { value: settings.brightness ?? 0.0 },
+        uContrast: { value: settings.contrast ?? 1.15 },
+        uThreshold: { value: settings.threshold ?? 0.5 },
+        uGammaCurve: { value: settings.gammaCurve ?? 1.0 },
+        uFilterDarkBg: { value: settings.filterDarkBg ? 1.0 : 0.0 },
       },
       transparent: true,
       depthWrite: false,
@@ -570,6 +600,11 @@ export const MatrixScene = forwardRef(({
         uniforms.uInvertLuminance.value = settingsRef.current.invertLuminance ? 1.0 : 0.0;
         uniforms.uBinaryFlipSpeed.value = settingsRef.current.binaryFlipSpeed;
         uniforms.uBloomGlow.value = settingsRef.current.bloomGlow;
+        uniforms.uBrightness.value = settingsRef.current.brightness ?? 0.0;
+        uniforms.uContrast.value = settingsRef.current.contrast ?? 1.15;
+        uniforms.uThreshold.value = settingsRef.current.threshold ?? 0.5;
+        uniforms.uGammaCurve.value = settingsRef.current.gammaCurve ?? 1.0;
+        uniforms.uFilterDarkBg.value = settingsRef.current.filterDarkBg ? 1.0 : 0.0;
 
         // Map mode string to integer
         const modeMap = {

@@ -22,6 +22,11 @@ export const App = () => {
     invertLuminance: false,
     autoRotate: false,
     soundEnabled: true,
+    brightness: 0.0,
+    contrast: 1.15,
+    threshold: 0.5,
+    gammaCurve: 1.0,
+    filterDarkBg: false,
   });
 
   const [currentPresetId, setCurrentPresetId] = useState('hacker');
